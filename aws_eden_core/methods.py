@@ -526,7 +526,7 @@ def create_cname_record(zone_id: str, record_name: str, record_value: str):
     if check_record(zone_id, record_name):
         logger.info(f"CNAME record already exists, skipping deletion: "
                     f"{record_name} -> {record_value}")
-        return None
+        return record_name
 
     response = route53.change_resource_record_sets(
         HostedZoneId=zone_id,
@@ -552,7 +552,7 @@ def create_cname_record(zone_id: str, record_name: str, record_value: str):
 
     logger.debug(response)
     logger.info(f"Successfully created CNAME: {clean_record_name} -> {record_value}")
-    return response
+    return clean_record_name
 
 
 def delete_cname_record(zone_id: str, record_name: str, record_value: str):
@@ -712,7 +712,7 @@ def delete_env(branch, variables):
 
     logger.info(f"Successfully finished deleting environment {dynamic_resource_name}")
 
-    return
+    return dynamic_domain_name
 
 
 def get_variable(variables, key):
@@ -820,7 +820,7 @@ def create_env(branch, image_uri, variables):
             new_target_group_arn,
         )
 
-    create_cname_record(
+    cname = create_cname_record(
         dynamic_zone_id,
         dynamic_domain_name,
         target_alb_domain_name,
@@ -837,4 +837,7 @@ def create_env(branch, image_uri, variables):
 
     logger.info(f"Successfully finished creating environment {dynamic_resource_name}")
 
-    return
+    return {
+        'name': dynamic_resource_name,
+        'cname': cname,
+    }

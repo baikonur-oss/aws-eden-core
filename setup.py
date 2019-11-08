@@ -4,12 +4,12 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 requirements = [
-    'boto3==1.9.164',
+    'boto3',
 ]
 
 setup(
     name='aws_eden_core',
-    version='v0.1.0',
+    version='v0.1.1',
     license='MIT',
     author='Tamirlan Torgayev',
     author_email='torgayev@me.com',
