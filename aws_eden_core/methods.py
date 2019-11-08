@@ -712,7 +712,9 @@ def delete_env(branch, variables):
 
     logger.info(f"Successfully finished deleting environment {dynamic_resource_name}")
 
-    return dynamic_domain_name
+    return {
+        'name': dynamic_resource_name,
+    }
 
 
 def get_variable(variables, key):
