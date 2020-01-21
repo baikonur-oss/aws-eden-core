@@ -185,20 +185,10 @@ def create_target_group(reference_target_group_arn: str, resource_name: str):
     return target_group_arn
 
 
-def create_service(reference_service: dict, resource_name: str, task_definition: dict,
+def create_service(reference_service: dict, resource_name: str, task_definition_arn: str,
                    cluster_name: str, target_group_arn: dict):
-    # TODO: dynamic subnet/sg ids?
-    # if 'DYNAMIC_SUBNET_IDS' in os.environ:
-    #     reference_service['networkConfiguration']['awsvpcConfiguration']['subnets'] = \
-    #         get_variable(variables, 'DYNAMIC_SUBNET_IDS')
-    #
-    # if 'DYNAMIC_SECURITY_GROUP_IDS' in os.environ:
-    #     reference_service['networkConfiguration']['awsvpcConfiguration']['securityGroups'] = \
-    #         get_variable(variables, 'DYNAMIC_SECURITY_GROUP_IDS')
 
     clean_resource_name = sanitize_string_alphanum_hyphen(resource_name)
-
-    task_definition_arn = task_definition['taskDefinition']['taskDefinitionArn']
 
     target_container_name: str = reference_service['loadBalancers'][0]['containerName']
     target_container_port: int = reference_service['loadBalancers'][0]['containerPort']
@@ -807,7 +797,7 @@ def create_env(branch, image_uri, variables):
             create_service(
                 reference_service,
                 dynamic_resource_name,
-                new_task_definition,
+                new_task_definition_arn,
                 cluster_name,
                 new_target_group_arn,
             )
@@ -817,7 +807,7 @@ def create_env(branch, image_uri, variables):
         create_service(
             reference_service,
             dynamic_resource_name,
-            new_task_definition,
+            new_task_definition_arn,
             cluster_name,
             new_target_group_arn,
         )
