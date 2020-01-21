@@ -512,19 +512,15 @@ def create_cname_record(zone_id: str, record_name: str, record_value: str):
     if hosted_zone['ResponseMetadata']['HTTPStatusCode'] != 200:
         raise ValueError(f"Zone not found: {zone_id}")
 
-    # check for existing record
-    if check_record(zone_id, record_name):
-        logger.info(f"CNAME record already exists, skipping deletion: "
-                    f"{record_name} -> {record_value}")
-        return record_name
-
     response = route53.change_resource_record_sets(
         HostedZoneId=zone_id,
         ChangeBatch={
             'Comment': f"Created by eden",
             'Changes': [
                 {
-                    'Action': 'CREATE',
+                    'Action': 'UPSERT',
+                    # UPSERT : If a resource record set does not already exist, AWS creates it.
+                    # If a resource set does exist, Route 53 updates it with the values in the request.
                     'ResourceRecordSet': {
                         'Name': clean_record_name,
                         'Type': 'CNAME',
