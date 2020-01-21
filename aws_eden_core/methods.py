@@ -178,9 +178,10 @@ def create_target_group(reference_target_group_arn: str, resource_name: str):
                 kwargs[key] = reference_target_group[key]
 
         response = elbv2.create_target_group(**kwargs)
-        target_group_arn = response['TargetGroups'][0]['TargetGroupArn']
-        logger.info(f"Created target group {target_group_arn}")
         logger.debug(response)
+        target_group_arn = response['TargetGroups'][0]['TargetGroupArn']
+
+        logger.info(f"Created target group {target_group_arn}")
 
     return target_group_arn
 
