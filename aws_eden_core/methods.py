@@ -467,18 +467,15 @@ def create_alb_host_listener_rule(alb_arn: str, target_group_arn: str, domain_na
     return response
 
 
-def check_record(zone_id: str, fqdn: str):
-    # maybe should check if value is record_value, type is CNAME too?
-
+def get_record(zone_id: str, fqdn: str):
     clean_fqdn = sanitize_string_dns(fqdn)
     dotted_fqdn = clean_fqdn
     if fqdn[-1] != '.':
         dotted_fqdn += '.'
 
-    logger.info(f"Checking if record {dotted_fqdn} exists in zone {zone_id}")
+    logger.info(f"Searching for record {dotted_fqdn} in zone {zone_id}")
 
     paginator = route53.get_paginator('list_resource_record_sets')
-    record_exists = False
 
     try:
         records = paginator.paginate(HostedZoneId=zone_id)
@@ -487,21 +484,17 @@ def check_record(zone_id: str, fqdn: str):
                 logger.debug(record)
                 if record['Type'] == 'CNAME' and record['Name'] == dotted_fqdn:
                     logger.info(f"Found existing record {dotted_fqdn} in zone {zone_id}")
-                    record_exists = True
+                    return record
 
     except Exception as e:
         logger.error(e)
         raise
 
-    return record_exists
+    return None
 
 
-def create_cname_record(zone_id: str, record_name: str, record_value: str):
-    # requires AWS ALB zone ID etc.
-
-    clean_record_name = sanitize_string_dns(record_name)
-
-    # TODO: create aliases to ALB instead of CNAMEs
+def create_record(zone_id: str, record_name: str, alb_dns_name: str):
+    record_name_clean = sanitize_string_dns(record_name)
 
     hosted_zone = route53.get_hosted_zone(
         Id=zone_id
@@ -522,14 +515,13 @@ def create_cname_record(zone_id: str, record_name: str, record_value: str):
                     # UPSERT : If a resource record set does not already exist, AWS creates it.
                     # If a resource set does exist, Route 53 updates it with the values in the request.
                     'ResourceRecordSet': {
-                        'Name': clean_record_name,
-                        'Type': 'CNAME',
-                        'TTL': 60,
-                        'ResourceRecords': [
-                            {
-                                'Value': record_value,
-                            }
-                        ]
+                        'Name': record_name_clean,
+                        'Type': 'A',
+                        'AliasTarget': {
+                                'HostedZoneId': zone_id,
+                                'DNSName': alb_dns_name,
+                                'EvaluateTargetHealth': False
+                          }
                     }
                 }
             ]
@@ -537,11 +529,11 @@ def create_cname_record(zone_id: str, record_name: str, record_value: str):
     )
 
     logger.debug(response)
-    logger.info(f"Successfully created CNAME: {clean_record_name} -> {record_value}")
-    return clean_record_name
+    logger.info(f"Successfully created CNAME: {record_name_clean} -> {alb_dns_name}")
+    return record_name_clean
 
 
-def delete_cname_record(zone_id: str, record_name: str, record_value: str):
+def delete_record(zone_id: str, record_name: str):
     clean_record_name = sanitize_string_dns(record_name)
 
     hosted_zone = route53.get_hosted_zone(
@@ -554,7 +546,8 @@ def delete_cname_record(zone_id: str, record_name: str, record_value: str):
         raise ValueError(f"Zone not found: {zone_id}")
 
     # check for existing record
-    if check_record(zone_id, record_name):
+    record = get_record(zone_id, record_name)
+    if record is not None:
         response = route53.change_resource_record_sets(
             HostedZoneId=zone_id,
             ChangeBatch={
@@ -562,26 +555,17 @@ def delete_cname_record(zone_id: str, record_name: str, record_value: str):
                 'Changes': [
                     {
                         'Action': 'DELETE',
-                        'ResourceRecordSet': {
-                            'Name': clean_record_name,
-                            'Type': 'CNAME',
-                            'TTL': 60,
-                            'ResourceRecords': [
-                                {
-                                    'Value': record_value,
-                                }
-                            ]
-                        }
+                        'ResourceRecordSet': record
                     }
                 ]
             }
         )
         logger.debug(response)
-        logger.info(f"Successfully removed CNAME record {clean_record_name}")
+        logger.info(f"Successfully removed record {clean_record_name}")
         return response
 
     else:
-        logger.info(f"CNAME record for {clean_record_name} does not exist, skipping deletion")
+        logger.info(f"Record for {clean_record_name} does not exist, skipping deletion")
         return None
 
 
@@ -660,10 +644,9 @@ def delete_env(branch, variables):
         endpoints_update_key,
     )
 
-    delete_cname_record(
+    delete_record(
         dynamic_zone_id,
         dynamic_domain_name,
-        target_alb_domain_name,
     )
 
     existing_service = describe_service(cluster_name, sanitize_string_alphanum_hyphen(resource_name))
@@ -818,7 +801,7 @@ def create_env(branch, image_uri, variables):
             new_target_group_arn,
         )
 
-    cname = create_cname_record(
+    cname = create_record(
         dynamic_zone_id,
         dynamic_domain_name,
         target_alb_domain_name,
