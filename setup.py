@@ -9,7 +9,7 @@ requirements = [
 
 setup(
     name='aws_eden_core',
-    version='0.1.2',
+    version='0.2.0',
     license='MIT',
     author='Tamirlan Torgayev',
     author_email='torgayev@me.com',
