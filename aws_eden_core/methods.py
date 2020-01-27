@@ -305,11 +305,11 @@ def endpoints_add(bucket_name: str, key: str, env_name: str, env_cname: str, env
     return True
 
 
-def endpoints_delete_env(bucket_name: str, key: str, env_name: str, env_cname: str, update_key: str):
+def endpoints_delete_env(bucket_name: str, key: str, name: str, fqdn: str, update_key: str):
     return_value = None
 
     logger.info(f"Updating config file s3://{bucket_name}/{key}, "
-                f"delete environment {env_name}: {update_key} -> {env_cname}")
+                f"delete environment {name}: {update_key} -> {fqdn}")
     path = f"/tmp/{key}"
     s3.Bucket(bucket_name).download_file(key, path)
     with open(path, mode='r') as f:
@@ -317,7 +317,7 @@ def endpoints_delete_env(bucket_name: str, key: str, env_name: str, env_cname: s
 
     for idx in range(0, len(env_dict['environments'])):
         element: dict = env_dict['environments'][idx]
-        if element['name'] == env_name and update_key in element:
+        if element['name'] == name and update_key in element:
             logger.debug(env_dict['environments'][idx])
 
             minimum_keys = ["env", "name", update_key]
@@ -493,7 +493,7 @@ def get_record(zone_id: str, fqdn: str):
     return None
 
 
-def create_record(zone_id: str, record_name: str, alb_dns_name: str):
+def create_record(zone_id: str, record_name: str, alb_dns_name: str, alb_hosted_zone_id: str):
     record_name_clean = sanitize_string_dns(record_name)
 
     hosted_zone = route53.get_hosted_zone(
@@ -518,7 +518,7 @@ def create_record(zone_id: str, record_name: str, alb_dns_name: str):
                         'Name': record_name_clean,
                         'Type': 'A',
                         'AliasTarget': {
-                                'HostedZoneId': zone_id,
+                                'HostedZoneId': alb_hosted_zone_id,
                                 'DNSName': alb_dns_name,
                                 'EvaluateTargetHealth': False
                           }
@@ -634,7 +634,6 @@ def delete_env(branch, variables):
     target_alb: dict = describe_alb(target_alb_arn)
     if not target_alb:
         raise ValueError(f"Load balancer not found: {target_alb_arn}")
-    target_alb_domain_name: str = target_alb['DNSName']
 
     endpoints_delete_env(
         endpoints_s3_bucket_name,
@@ -679,9 +678,7 @@ def delete_env(branch, variables):
         )
         logger.debug(f"delete alb host listener response: {response}")
 
-        response = delete_target_group(
-            resource_name
-        )
+        response = delete_target_group(resource_name)
         logger.debug(f"delete target group response: {response}")
 
     except elbv2.exceptions.TargetGroupNotFoundException:
@@ -727,7 +724,6 @@ def create_env(branch, image_uri, variables):
     target_alb = describe_alb(target_alb_arn)
     if not target_alb:
         raise ValueError(f"Load balancer not found: {target_alb_arn}")
-    target_alb_domain_name = target_alb['DNSName']
 
     reference_service: dict = describe_service(
         cluster_name,
@@ -748,14 +744,14 @@ def create_env(branch, image_uri, variables):
     logger.info(f"Registered new task definition: {new_task_definition_arn}")
     logger.debug(new_task_definition)
 
-    new_target_group_arn = create_target_group(
+    target_group_arn = create_target_group(
         reference_target_group_arn,
         resource_name
     )
 
     response = create_alb_host_listener_rule(
         target_alb_arn,
-        new_target_group_arn,
+        target_group_arn,
         dynamic_domain_name
     )
     logger.debug(f"create alb host listener response: {response}")
@@ -788,7 +784,7 @@ def create_env(branch, image_uri, variables):
                 resource_name,
                 new_task_definition_arn,
                 cluster_name,
-                new_target_group_arn,
+                target_group_arn,
             )
 
     else:
@@ -798,13 +794,14 @@ def create_env(branch, image_uri, variables):
             resource_name,
             new_task_definition_arn,
             cluster_name,
-            new_target_group_arn,
+            target_group_arn,
         )
 
     cname = create_record(
         dynamic_zone_id,
         dynamic_domain_name,
-        target_alb_domain_name,
+        target_alb['DNSName'],
+        target_alb['CanonicalHostedZoneId']
     )
 
     endpoints_add(
