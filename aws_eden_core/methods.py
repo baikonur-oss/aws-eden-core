@@ -601,12 +601,12 @@ def delete_task_family(family_name):
 
 def get_zone_name(zone_id: str):
     r = route53.get_hosted_zone(Id=zone_id)
-    return r['HostedZone']['Name'].rstip('.')
+    return r['HostedZone']['Name'].rstrip('.')
 
 
 def delete_env(branch, profile):
     # endpoints file
-    endpoints_s3_bucket_name: str = profile['endpoint_s3_bucket']
+    endpoints_s3_bucket_name: str = profile['endpoint_s3_bucket_name']
     endpoints_s3_key: str = profile['endpoint_s3_key']
     endpoints_update_key: str = profile['endpoint_update_key']
     endpoint_name_prefix: str = profile['endpoint_name_prefix']
