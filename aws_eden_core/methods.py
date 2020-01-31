@@ -599,38 +599,31 @@ def delete_task_family(family_name):
     return deleted_tasks
 
 
-def get_variable(variables, key):
-    if variables is None:
-        return os.environ[key]
-
-    return variables[key]
-
-
 def get_zone_name(zone_id: str):
     r = route53.get_hosted_zone(Id=zone_id)
     return r['HostedZone']['Name'].rstip('.')
 
 
-def delete_env(branch, variables):
+def delete_env(branch, profile):
     # endpoints file
-    endpoints_s3_bucket_name: str = get_variable(variables, 'ENDPOINT_S3_BUCKET')
-    endpoints_s3_key: str = get_variable(variables, 'ENDPOINT_S3_KEY')
-    endpoints_update_key: str = get_variable(variables, 'ENDPOINT_UPDATE_KEY')
-    endpoint_name_prefix: str = get_variable(variables, 'ENDPOINT_NAME_PREFIX')
+    endpoints_s3_bucket_name: str = profile['endpoint_s3_bucket']
+    endpoints_s3_key: str = profile['endpoint_s3_key']
+    endpoints_update_key: str = profile['endpoint_update_key']
+    endpoint_name_prefix: str = profile['endpoint_name_prefix']
     endpoint_name: str = f"{endpoint_name_prefix}-{branch}"
 
-    domain_name_prefix: str = get_variable(variables, 'DOMAIN_NAME_PREFIX')
-    dynamic_zone_id: str = get_variable(variables, 'DYNAMIC_ZONE_ID')
+    domain_name_prefix: str = profile['domain_name_prefix']
+    dynamic_zone_id: str = profile['dynamic_zone_id']
     dynamic_zone_name = get_zone_name(dynamic_zone_id)
     subdomain_name = f"{sanitize_string(domain_name_prefix)}-{sanitize_string(branch)}"
     dynamic_domain_name = f"{subdomain_name}.{dynamic_zone_name}"
 
-    resource_name_prefix: str = get_variable(variables, 'NAME_PREFIX')
+    resource_name_prefix: str = profile['name_prefix']
     resource_name: str = f"{resource_name_prefix}-{branch}"
 
-    cluster_name: str = get_variable(variables, 'TARGET_CLUSTER')
+    cluster_name: str = profile['target_cluster']
 
-    target_alb_arn: str = get_variable(variables, 'MASTER_ALB_ARN')
+    target_alb_arn: str = profile['master_alb_arn']
     target_alb: dict = describe_alb(target_alb_arn)
     if not target_alb:
         raise ValueError(f"Load balancer not found: {target_alb_arn}")
@@ -698,29 +691,29 @@ def delete_env(branch, variables):
     }
 
 
-def create_env(branch, image_uri, variables):
-    endpoints_s3_bucket_name: str = get_variable(variables, 'ENDPOINT_S3_BUCKET_NAME')
-    endpoints_s3_key: str = get_variable(variables, 'ENDPOINT_S3_KEY')
-    endpoints_update_key: str = get_variable(variables, 'ENDPOINT_UPDATE_KEY')
-    endpoint_name_prefix: str = get_variable(variables, 'ENDPOINT_NAME_PREFIX')
-    endpoint_type: str = get_variable(variables, 'ENDPOINT_ENV_TYPE')
+def create_env(branch, image_uri, profile):
+    endpoints_s3_bucket_name: str = profile['endpoint_s3_bucket_name']
+    endpoints_s3_key: str = profile['endpoint_s3_key']
+    endpoints_update_key: str = profile['endpoint_update_key']
+    endpoint_name_prefix: str = profile['endpoint_name_prefix']
+    endpoint_type: str = profile['endpoint_env_type']
     endpoint_name: str = f"{endpoint_name_prefix}-{branch}"
 
-    domain_name_prefix: str = get_variable(variables, 'DOMAIN_NAME_PREFIX')
-    dynamic_zone_id: str = get_variable(variables, 'DYNAMIC_ZONE_ID')
+    domain_name_prefix: str = profile['domain_name_prefix']
+    dynamic_zone_id: str = profile['dynamic_zone_id']
     dynamic_zone_name = get_zone_name(dynamic_zone_id)
     subdomain_name = f"{sanitize_string(domain_name_prefix)}-{sanitize_string(branch)}"
     dynamic_domain_name = f"{subdomain_name}.{dynamic_zone_name}"
 
-    resource_name_prefix: str = get_variable(variables, 'NAME_PREFIX')
+    resource_name_prefix: str = profile['name_prefix']
     resource_name: str = f"{resource_name_prefix}-{branch}"
 
     validators.check_image_uri(image_uri)
 
-    cluster_name: str = get_variable(variables, 'TARGET_CLUSTER')
-    reference_service_arn: str = get_variable(variables, 'REFERENCE_SERVICE_ARN')
+    cluster_name: str = profile['target_cluster']
+    reference_service_arn: str = profile['reference_service_arn']
 
-    target_alb_arn: str = get_variable(variables, 'MASTER_ALB_ARN')
+    target_alb_arn: str = profile['master_alb_arn']
     target_alb = describe_alb(target_alb_arn)
     if not target_alb:
         raise ValueError(f"Load balancer not found: {target_alb_arn}")
