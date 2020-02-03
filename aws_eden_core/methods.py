@@ -304,7 +304,7 @@ def endpoints_add(bucket_name: str, key: str, name: str, fqdn: str, env_type: st
     return True
 
 
-def endpoints_delete_env(bucket_name: str, key: str, name: str, fqdn: str, update_key: str):
+def endpoints_delete(bucket_name: str, key: str, name: str, fqdn: str, update_key: str):
     return_value = None
 
     logger.info(f"Updating config file s3://{bucket_name}/{key}, "
