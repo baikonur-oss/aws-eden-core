@@ -267,7 +267,7 @@ def update_service(reference_service: dict, resource_name: str, task_definition_
     return response
 
 
-def endpoints_add(bucket_name: str, key: str, env_name: str, env_cname: str, env_type: str, update_key: str):
+def endpoints_add(bucket_name: str, key: str, name: str, fqdn: str, env_type: str, update_key: str):
     logger.info(f"Updating config file s3://{bucket_name}/{key}, "
                 f"environment {env_name}: {update_key} -> {env_cname}")
     path = f"/tmp/{key}"
