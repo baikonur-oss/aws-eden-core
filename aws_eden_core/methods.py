@@ -528,7 +528,7 @@ def create_record(zone_id: str, record_name: str, alb_dns_name: str, alb_hosted_
     )
 
     logger.debug(response)
-    logger.info(f"Successfully created CNAME: {record_name_clean} -> {alb_dns_name}")
+    logger.info(f"Successfully created record: {record_name_clean} -> {alb_dns_name}")
     return record_name_clean
 
 
