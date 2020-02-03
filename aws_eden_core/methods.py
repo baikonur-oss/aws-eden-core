@@ -269,7 +269,7 @@ def update_service(reference_service: dict, resource_name: str, task_definition_
 
 def endpoints_add(bucket_name: str, key: str, name: str, fqdn: str, env_type: str, update_key: str):
     logger.info(f"Updating config file s3://{bucket_name}/{key}, "
-                f"environment {env_name}: {update_key} -> {env_cname}")
+                f"environment {name}: {update_key} -> {fqdn}")
     path = f"/tmp/{key}"
     s3.Bucket(bucket_name).download_file(key, path)
     with open(path, mode='r') as f:
@@ -279,8 +279,8 @@ def endpoints_add(bucket_name: str, key: str, name: str, fqdn: str, env_type: st
 
     updated_inplace = False
     for env in env_dict['environments']:
-        if env['name'] == env_name:
-            env[update_key] = env_cname
+        if env['name'] == name:
+            env[update_key] = fqdn
             updated_inplace = True
             logger.info(f"Existing environment found, updating in-place")
             logger.debug(env_dict['environments'])
@@ -288,9 +288,9 @@ def endpoints_add(bucket_name: str, key: str, name: str, fqdn: str, env_type: st
     if not updated_inplace:
         env_dict['environments'].append(
             {
-                "name": env_name,
+                "name": name,
                 "env": env_type,
-                update_key: env_cname,
+                update_key: fqdn,
             }
         )
         logger.info(f"Existing environment not found, adding new")
@@ -627,7 +627,7 @@ def delete_env(branch, profile):
     if not target_alb:
         raise ValueError(f"Load balancer not found: {target_alb_arn}")
 
-    endpoints_delete_env(
+    endpoints_delete(
         endpoints_s3_bucket_name,
         endpoints_s3_key,
         endpoint_name,
