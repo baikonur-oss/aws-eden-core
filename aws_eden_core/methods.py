@@ -1,6 +1,5 @@
 import json
 import logging
-import os
 import re
 
 import boto3
@@ -51,9 +50,9 @@ def create_task_definition(reference_task_definition_arn: dict, target_container
 
     if target_updated:
         kwargs = {
-            'family':               family,
-            'taskRoleArn':          reference_task_definition['taskRoleArn'],
-            'networkMode':          reference_task_definition['networkMode'],
+            'family': family,
+            'taskRoleArn': reference_task_definition['taskRoleArn'],
+            'networkMode': reference_task_definition['networkMode'],
             'containerDefinitions': container_definitions['containerDefinitions'],
         }
 
@@ -154,19 +153,19 @@ def create_target_group(reference_target_group_arn: str, resource_name: str):
         target_group_arn = existing_target_group['TargetGroupArn']
     else:
         kwargs = {
-            'Name':                       clean_resource_name,
-            'Protocol':                   reference_target_group['Protocol'],
-            'Port':                       reference_target_group['Port'],
-            'VpcId':                      reference_target_group['VpcId'],
-            'HealthCheckProtocol':        reference_target_group['HealthCheckProtocol'],
-            'HealthCheckPort':            reference_target_group['HealthCheckPort'],
-            'HealthCheckPath':            reference_target_group['HealthCheckPath'],
+            'Name': clean_resource_name,
+            'Protocol': reference_target_group['Protocol'],
+            'Port': reference_target_group['Port'],
+            'VpcId': reference_target_group['VpcId'],
+            'HealthCheckProtocol': reference_target_group['HealthCheckProtocol'],
+            'HealthCheckPort': reference_target_group['HealthCheckPort'],
+            'HealthCheckPath': reference_target_group['HealthCheckPath'],
             'HealthCheckIntervalSeconds': reference_target_group['HealthCheckIntervalSeconds'],
-            'HealthCheckTimeoutSeconds':  reference_target_group['HealthCheckTimeoutSeconds'],
-            'HealthyThresholdCount':      reference_target_group['HealthyThresholdCount'],
-            'UnhealthyThresholdCount':    reference_target_group['UnhealthyThresholdCount'],
-            'Matcher':                    reference_target_group['Matcher'],
-            'TargetType':                 reference_target_group['TargetType'],
+            'HealthCheckTimeoutSeconds': reference_target_group['HealthCheckTimeoutSeconds'],
+            'HealthyThresholdCount': reference_target_group['HealthyThresholdCount'],
+            'UnhealthyThresholdCount': reference_target_group['UnhealthyThresholdCount'],
+            'Matcher': reference_target_group['Matcher'],
+            'TargetType': reference_target_group['TargetType'],
         }
 
         optional_keys = [
@@ -178,42 +177,32 @@ def create_target_group(reference_target_group_arn: str, resource_name: str):
                 kwargs[key] = reference_target_group[key]
 
         response = elbv2.create_target_group(**kwargs)
-        target_group_arn = response['TargetGroups'][0]['TargetGroupArn']
-        logger.info(f"Created target group {target_group_arn}")
         logger.debug(response)
+        target_group_arn = response['TargetGroups'][0]['TargetGroupArn']
+
+        logger.info(f"Created target group {target_group_arn}")
 
     return target_group_arn
 
 
-def create_service(reference_service: dict, resource_name: str, task_definition: dict,
+def create_service(reference_service: dict, resource_name: str, task_definition_arn: str,
                    cluster_name: str, target_group_arn: dict):
-    # TODO: dynamic subnet/sg ids?
-    # if 'DYNAMIC_SUBNET_IDS' in os.environ:
-    #     reference_service['networkConfiguration']['awsvpcConfiguration']['subnets'] = \
-    #         get_variable(variables, 'DYNAMIC_SUBNET_IDS')
-    #
-    # if 'DYNAMIC_SECURITY_GROUP_IDS' in os.environ:
-    #     reference_service['networkConfiguration']['awsvpcConfiguration']['securityGroups'] = \
-    #         get_variable(variables, 'DYNAMIC_SECURITY_GROUP_IDS')
-
     clean_resource_name = sanitize_string_alphanum_hyphen(resource_name)
-
-    task_definition_arn = task_definition['taskDefinition']['taskDefinitionArn']
 
     target_container_name: str = reference_service['loadBalancers'][0]['containerName']
     target_container_port: int = reference_service['loadBalancers'][0]['containerPort']
 
     kwargs = {
-        'desiredCount':   reference_service['desiredCount'],
-        'launchType':     reference_service['launchType'],
-        'cluster':        cluster_name,
-        'serviceName':    clean_resource_name,
+        'desiredCount': reference_service['desiredCount'],
+        'launchType': reference_service['launchType'],
+        'cluster': cluster_name,
+        'serviceName': clean_resource_name,
         'taskDefinition': task_definition_arn,
-        'loadBalancers':  [
+        'loadBalancers': [
             {
                 'targetGroupArn': target_group_arn,
-                'containerName':  target_container_name,
-                'containerPort':  target_container_port
+                'containerName': target_container_name,
+                'containerPort': target_container_port
             },
         ],
 
@@ -278,9 +267,9 @@ def update_service(reference_service: dict, resource_name: str, task_definition_
     return response
 
 
-def config_add_env(bucket_name: str, key: str, env_name: str, env_cname: str, env_type: str, update_key: str):
+def endpoints_add(bucket_name: str, key: str, name: str, fqdn: str, env_type: str, update_key: str):
     logger.info(f"Updating config file s3://{bucket_name}/{key}, "
-                f"environment {env_name}: {update_key} -> {env_cname}")
+                f"environment {name}: {update_key} -> {fqdn}")
     path = f"/tmp/{key}"
     s3.Bucket(bucket_name).download_file(key, path)
     with open(path, mode='r') as f:
@@ -290,8 +279,8 @@ def config_add_env(bucket_name: str, key: str, env_name: str, env_cname: str, en
 
     updated_inplace = False
     for env in env_dict['environments']:
-        if env['name'] == env_name:
-            env[update_key] = env_cname
+        if env['name'] == name:
+            env[update_key] = fqdn
             updated_inplace = True
             logger.info(f"Existing environment found, updating in-place")
             logger.debug(env_dict['environments'])
@@ -299,9 +288,9 @@ def config_add_env(bucket_name: str, key: str, env_name: str, env_cname: str, en
     if not updated_inplace:
         env_dict['environments'].append(
             {
-                "name":     env_name,
-                "env":      env_type,
-                update_key: env_cname,
+                "name": name,
+                "env": env_type,
+                update_key: fqdn,
             }
         )
         logger.info(f"Existing environment not found, adding new")
@@ -315,11 +304,11 @@ def config_add_env(bucket_name: str, key: str, env_name: str, env_cname: str, en
     return True
 
 
-def config_delete_env(bucket_name: str, key: str, env_name: str, env_cname: str, update_key: str):
+def endpoints_delete(bucket_name: str, key: str, name: str, fqdn: str, update_key: str):
     return_value = None
 
     logger.info(f"Updating config file s3://{bucket_name}/{key}, "
-                f"delete environment {env_name}: {update_key} -> {env_cname}")
+                f"delete environment {name}: {update_key} -> {fqdn}")
     path = f"/tmp/{key}"
     s3.Bucket(bucket_name).download_file(key, path)
     with open(path, mode='r') as f:
@@ -327,7 +316,7 @@ def config_delete_env(bucket_name: str, key: str, env_name: str, env_cname: str,
 
     for idx in range(0, len(env_dict['environments'])):
         element: dict = env_dict['environments'][idx]
-        if element['name'] == env_name and update_key in element:
+        if element['name'] == name and update_key in element:
             logger.debug(env_dict['environments'][idx])
 
             minimum_keys = ["env", "name", update_key]
@@ -458,7 +447,7 @@ def create_alb_host_listener_rule(alb_arn: str, target_group_arn: str, domain_na
         ListenerArn=https_listener['ListenerArn'],
         Conditions=[
             {
-                'Field':  'host-header',
+                'Field': 'host-header',
                 'Values': [
                     domain_name,
                 ]
@@ -467,7 +456,7 @@ def create_alb_host_listener_rule(alb_arn: str, target_group_arn: str, domain_na
         Priority=max_priority + 1,
         Actions=[
             {
-                'Type':           'forward',
+                'Type': 'forward',
                 'TargetGroupArn': target_group_arn,
 
             },
@@ -477,18 +466,15 @@ def create_alb_host_listener_rule(alb_arn: str, target_group_arn: str, domain_na
     return response
 
 
-def check_record(zone_id: str, fqdn: str):
-    # maybe should check if value is record_value, type is CNAME too?
-
+def get_record(zone_id: str, fqdn: str):
     clean_fqdn = sanitize_string_dns(fqdn)
     dotted_fqdn = clean_fqdn
     if fqdn[-1] != '.':
         dotted_fqdn += '.'
 
-    logger.info(f"Checking if record {dotted_fqdn} exists in zone {zone_id}")
+    logger.info(f"Searching for record {dotted_fqdn} in zone {zone_id}")
 
     paginator = route53.get_paginator('list_resource_record_sets')
-    record_exists = False
 
     try:
         records = paginator.paginate(HostedZoneId=zone_id)
@@ -497,21 +483,17 @@ def check_record(zone_id: str, fqdn: str):
                 logger.debug(record)
                 if record['Type'] == 'CNAME' and record['Name'] == dotted_fqdn:
                     logger.info(f"Found existing record {dotted_fqdn} in zone {zone_id}")
-                    record_exists = True
+                    return record
 
     except Exception as e:
         logger.error(e)
         raise
 
-    return record_exists
+    return None
 
 
-def create_cname_record(zone_id: str, record_name: str, record_value: str):
-    # requires AWS ALB zone ID etc.
-
-    clean_record_name = sanitize_string_dns(record_name)
-
-    # TODO: create aliases to ALB instead of CNAMEs
+def create_record(zone_id: str, record_name: str, alb_dns_name: str, alb_hosted_zone_id: str):
+    record_name_clean = sanitize_string_dns(record_name)
 
     hosted_zone = route53.get_hosted_zone(
         Id=zone_id
@@ -521,12 +503,6 @@ def create_cname_record(zone_id: str, record_name: str, record_value: str):
 
     if hosted_zone['ResponseMetadata']['HTTPStatusCode'] != 200:
         raise ValueError(f"Zone not found: {zone_id}")
-
-    # check for existing record
-    if check_record(zone_id, record_name):
-        logger.info(f"CNAME record already exists, skipping deletion: "
-                    f"{record_name} -> {record_value}")
-        return record_name
 
     response = route53.change_resource_record_sets(
         HostedZoneId=zone_id,
@@ -534,16 +510,17 @@ def create_cname_record(zone_id: str, record_name: str, record_value: str):
             'Comment': f"Created by eden",
             'Changes': [
                 {
-                    'Action':            'CREATE',
+                    'Action': 'UPSERT',
+                    # UPSERT : If a resource record set does not already exist, AWS creates it.
+                    # If a resource set does exist, Route 53 updates it with the values in the request.
                     'ResourceRecordSet': {
-                        'Name':            clean_record_name,
-                        'Type':            'CNAME',
-                        'TTL':             60,
-                        'ResourceRecords': [
-                            {
-                                'Value': record_value,
-                            }
-                        ]
+                        'Name': record_name_clean,
+                        'Type': 'A',
+                        'AliasTarget': {
+                                'HostedZoneId': alb_hosted_zone_id,
+                                'DNSName': alb_dns_name,
+                                'EvaluateTargetHealth': False
+                          }
                     }
                 }
             ]
@@ -551,11 +528,11 @@ def create_cname_record(zone_id: str, record_name: str, record_value: str):
     )
 
     logger.debug(response)
-    logger.info(f"Successfully created CNAME: {clean_record_name} -> {record_value}")
-    return clean_record_name
+    logger.info(f"Successfully created record: {record_name_clean} -> {alb_dns_name}")
+    return record_name_clean
 
 
-def delete_cname_record(zone_id: str, record_name: str, record_value: str):
+def delete_record(zone_id: str, record_name: str):
     clean_record_name = sanitize_string_dns(record_name)
 
     hosted_zone = route53.get_hosted_zone(
@@ -568,34 +545,26 @@ def delete_cname_record(zone_id: str, record_name: str, record_value: str):
         raise ValueError(f"Zone not found: {zone_id}")
 
     # check for existing record
-    if check_record(zone_id, record_name):
+    record = get_record(zone_id, record_name)
+    if record is not None:
         response = route53.change_resource_record_sets(
             HostedZoneId=zone_id,
             ChangeBatch={
                 'Comment': f"Created by eden",
                 'Changes': [
                     {
-                        'Action':            'DELETE',
-                        'ResourceRecordSet': {
-                            'Name':            clean_record_name,
-                            'Type':            'CNAME',
-                            'TTL':             60,
-                            'ResourceRecords': [
-                                {
-                                    'Value': record_value,
-                                }
-                            ]
-                        }
+                        'Action': 'DELETE',
+                        'ResourceRecordSet': record
                     }
                 ]
             }
         )
         logger.debug(response)
-        logger.info(f"Successfully removed CNAME record {clean_record_name}")
+        logger.info(f"Successfully removed record {clean_record_name}")
         return response
 
     else:
-        logger.info(f"CNAME record for {clean_record_name} does not exist, skipping deletion")
+        logger.info(f"Record for {clean_record_name} does not exist, skipping deletion")
         return None
 
 
@@ -629,65 +598,71 @@ def delete_task_family(family_name):
     return deleted_tasks
 
 
-def delete_env(branch, variables):
-    config_s3_bucket_name: str = get_variable(variables, 'CONFIG_BUCKET')
-    config_s3_key: str = get_variable(variables, 'CONFIG_BUCKET_KEY')
-    config_update_key: str = get_variable(variables, 'CONFIG_UPDATE_KEY')
-    config_name_prefix: str = get_variable(variables, 'CONFIG_NAME_PREFIX')
-    domain_name_prefix: str = get_variable(variables, 'DOMAIN_NAME_PREFIX')
-    dynamic_zone_id: str = get_variable(variables, 'DYNAMIC_ZONE_ID')
-    dynamic_zone_name: str = get_variable(variables, 'DYNAMIC_ZONE_NAME').rstrip('.')
-    dynamic_domain_name = f"{sanitize_string(domain_name_prefix)}-{sanitize_string(branch)}.{dynamic_zone_name}"
-    config_env_name: str = f"{config_name_prefix}-{branch}"
+def get_zone_name(zone_id: str):
+    r = route53.get_hosted_zone(Id=zone_id)
+    return r['HostedZone']['Name'].rstrip('.')
 
-    global_name_prefix: str = get_variable(variables, 'NAME_PREFIX')
-    dynamic_resource_name: str = f"{global_name_prefix}-{branch}"
 
-    cluster_name: str = get_variable(variables, 'TARGET_CLUSTER')
+def delete_env(branch, profile):
+    # endpoints file
+    endpoints_s3_bucket_name: str = profile['endpoint_s3_bucket_name']
+    endpoints_s3_key: str = profile['endpoint_s3_key']
+    endpoints_update_key: str = profile['endpoint_update_key']
+    endpoint_name_prefix: str = profile['endpoint_name_prefix']
+    endpoint_name: str = f"{endpoint_name_prefix}-{branch}"
 
-    target_alb_arn: str = get_variable(variables, 'MASTER_ALB_ARN')
+    domain_name_prefix: str = profile['domain_name_prefix']
+    dynamic_zone_id: str = profile['dynamic_zone_id']
+    dynamic_zone_name = get_zone_name(dynamic_zone_id)
+    subdomain_name = f"{sanitize_string(domain_name_prefix)}-{sanitize_string(branch)}"
+    dynamic_domain_name = f"{subdomain_name}.{dynamic_zone_name}"
+
+    resource_name_prefix: str = profile['name_prefix']
+    resource_name: str = f"{resource_name_prefix}-{branch}"
+
+    cluster_name: str = profile['target_cluster']
+
+    target_alb_arn: str = profile['master_alb_arn']
     target_alb: dict = describe_alb(target_alb_arn)
     if not target_alb:
         raise ValueError(f"Load balancer not found: {target_alb_arn}")
-    target_alb_domain_name: str = target_alb['DNSName']
 
-    config_delete_env(
-        config_s3_bucket_name,
-        config_s3_key,
-        config_env_name,
+    endpoints_delete(
+        endpoints_s3_bucket_name,
+        endpoints_s3_key,
+        endpoint_name,
         dynamic_domain_name,
-        config_update_key,
+        endpoints_update_key,
     )
 
-    delete_cname_record(
+    delete_record(
         dynamic_zone_id,
         dynamic_domain_name,
-        target_alb_domain_name,
     )
 
-    existing_service = describe_service(cluster_name, sanitize_string_alphanum_hyphen(dynamic_resource_name))
-    logger.debug(f"Looking for service named {sanitize_string_alphanum_hyphen(dynamic_resource_name)} "
+    existing_service = describe_service(cluster_name, sanitize_string_alphanum_hyphen(resource_name))
+    logger.debug(f"Looking for service named {sanitize_string_alphanum_hyphen(resource_name)} "
                  f"in cluster {cluster_name}: "
                  f"{existing_service}")
 
     if existing_service:
         if existing_service['status'] == 'INACTIVE':
-            logger.info(f"ECS Service {dynamic_resource_name} not found, skipping deletion")
+            logger.info(f"ECS Service {resource_name} not found, skipping deletion")
 
         else:
-            logger.info(f"ECS Service {dynamic_resource_name} exists, will delete")
+            logger.info(f"ECS Service {resource_name} exists, will delete")
             response = delete_service(
-                dynamic_resource_name,
+                resource_name,
                 cluster_name,
             )
-            logger.info(f"Successfully deleted service {dynamic_resource_name} from cluster {cluster_name}")
+            logger.info(f"Successfully deleted service {resource_name} from cluster {cluster_name}")
             logger.debug(response)
 
     else:
-        logger.info(f"ECS Service {dynamic_resource_name} not found, skipping deletion")
+        logger.info(f"ECS Service {resource_name} not found, skipping deletion")
 
     try:
-        dynamic_target_group_arn: str = describe_target_group_name(dynamic_resource_name)['TargetGroupArn']
+        dynamic_target_group_arn: str = describe_target_group_name(resource_name)['TargetGroupArn']
         response = delete_alb_host_listener_rule(
             target_alb_arn,
             dynamic_target_group_arn,
@@ -695,60 +670,52 @@ def delete_env(branch, variables):
         )
         logger.debug(f"delete alb host listener response: {response}")
 
-        response = delete_target_group(
-            dynamic_resource_name
-        )
+        response = delete_target_group(resource_name)
         logger.debug(f"delete target group response: {response}")
 
     except elbv2.exceptions.TargetGroupNotFoundException:
-        logger.info(f"Target group {dynamic_resource_name} not found, "
+        logger.info(f"Target group {resource_name} not found, "
                     f"skipping deletion of listener rule and target group")
 
     deleted_tasks = delete_task_family(
-        dynamic_resource_name,
+        resource_name,
     )
-    logger.info(f"Deleted all task definitions for family: {dynamic_resource_name}, "
+    logger.info(f"Deleted all task definitions for family: {resource_name}, "
                 f"{deleted_tasks} tasks deleted total")
 
-    logger.info(f"Successfully finished deleting environment {dynamic_resource_name}")
+    logger.info(f"Successfully finished deleting environment {resource_name}")
 
     return {
-        'name': dynamic_resource_name,
+        'name': resource_name,
     }
 
 
-def get_variable(variables, key):
-    if variables is None:
-        return os.environ[key]
+def create_env(branch, image_uri, profile):
+    endpoints_s3_bucket_name: str = profile['endpoint_s3_bucket_name']
+    endpoints_s3_key: str = profile['endpoint_s3_key']
+    endpoints_update_key: str = profile['endpoint_update_key']
+    endpoint_name_prefix: str = profile['endpoint_name_prefix']
+    endpoint_type: str = profile['endpoint_env_type']
+    endpoint_name: str = f"{endpoint_name_prefix}-{branch}"
 
-    return variables[key]
+    domain_name_prefix: str = profile['domain_name_prefix']
+    dynamic_zone_id: str = profile['dynamic_zone_id']
+    dynamic_zone_name = get_zone_name(dynamic_zone_id)
+    subdomain_name = f"{sanitize_string(domain_name_prefix)}-{sanitize_string(branch)}"
+    dynamic_domain_name = f"{subdomain_name}.{dynamic_zone_name}"
 
-
-def create_env(branch, image_uri, variables):
-    config_s3_bucket_name: str = get_variable(variables, 'CONFIG_BUCKET')
-    config_s3_key: str = get_variable(variables, 'CONFIG_BUCKET_KEY')
-    config_update_key: str = get_variable(variables, 'CONFIG_UPDATE_KEY')
-    config_name_prefix: str = get_variable(variables, 'CONFIG_NAME_PREFIX')
-    config_env_type: str = get_variable(variables, 'CONFIG_ENV_TYPE')
-    domain_name_prefix: str = get_variable(variables, 'DOMAIN_NAME_PREFIX')
-    dynamic_zone_id: str = get_variable(variables, 'DYNAMIC_ZONE_ID')
-    dynamic_zone_name: str = get_variable(variables, 'DYNAMIC_ZONE_NAME').rstrip('.')
-    dynamic_domain_name = f"{sanitize_string(domain_name_prefix)}-{sanitize_string(branch)}.{dynamic_zone_name}"
-
-    global_name_prefix: str = get_variable(variables, 'NAME_PREFIX')
-    dynamic_resource_name: str = f"{global_name_prefix}-{branch}"
-    config_env_name: str = f"{config_name_prefix}-{branch}"
+    resource_name_prefix: str = profile['name_prefix']
+    resource_name: str = f"{resource_name_prefix}-{branch}"
 
     validators.check_image_uri(image_uri)
 
-    cluster_name: str = get_variable(variables, 'TARGET_CLUSTER')
-    reference_service_arn: str = get_variable(variables, 'REFERENCE_SERVICE_ARN')
+    cluster_name: str = profile['target_cluster']
+    reference_service_arn: str = profile['reference_service_arn']
 
-    target_alb_arn: str = get_variable(variables, 'MASTER_ALB_ARN')
+    target_alb_arn: str = profile['master_alb_arn']
     target_alb = describe_alb(target_alb_arn)
     if not target_alb:
         raise ValueError(f"Load balancer not found: {target_alb_arn}")
-    target_alb_domain_name = target_alb['DNSName']
 
     reference_service: dict = describe_service(
         cluster_name,
@@ -762,84 +729,85 @@ def create_env(branch, image_uri, variables):
     new_task_definition = create_task_definition(
         reference_service['taskDefinition'],
         target_container_name,
-        dynamic_resource_name,
+        resource_name,
         image_uri
     )
     new_task_definition_arn = new_task_definition['taskDefinition']['taskDefinitionArn']
     logger.info(f"Registered new task definition: {new_task_definition_arn}")
     logger.debug(new_task_definition)
 
-    new_target_group_arn = create_target_group(
+    target_group_arn = create_target_group(
         reference_target_group_arn,
-        dynamic_resource_name
+        resource_name
     )
 
     response = create_alb_host_listener_rule(
         target_alb_arn,
-        new_target_group_arn,
+        target_group_arn,
         dynamic_domain_name
     )
     logger.debug(f"create alb host listener response: {response}")
 
-    existing_service = describe_service(cluster_name, dynamic_resource_name)
-    logger.debug(f"Looking for existing service named {dynamic_resource_name} in cluster {cluster_name}: "
+    existing_service = describe_service(cluster_name, resource_name)
+    logger.debug(f"Looking for existing service named {resource_name} in cluster {cluster_name}: "
                  f"{existing_service}")
 
     if existing_service:
         if existing_service['status'] == 'ACTIVE':
-            logger.info(f"ECS Service {dynamic_resource_name} already exists, skipping creation")
+            logger.info(f"ECS Service {resource_name} already exists, skipping creation")
             logger.info(f"Will deploy task definition {new_task_definition_arn} "
-                        f"to service {dynamic_resource_name}")
+                        f"to service {resource_name}")
 
             response = update_service(
                 reference_service,
-                dynamic_resource_name,
+                resource_name,
                 new_task_definition_arn,
                 cluster_name,
             )
 
             logger.info(f"Successfully deployed task definition {new_task_definition_arn} to "
-                        f"service {dynamic_resource_name} in cluster {cluster_name}")
+                        f"service {resource_name} in cluster {cluster_name}")
             logger.debug(response)
 
         else:
-            logger.info(f"ECS Service {dynamic_resource_name} does not exist, will create new service")
+            logger.info(f"ECS Service {resource_name} does not exist, will create new service")
             create_service(
                 reference_service,
-                dynamic_resource_name,
-                new_task_definition,
+                resource_name,
+                new_task_definition_arn,
                 cluster_name,
-                new_target_group_arn,
+                target_group_arn,
             )
 
     else:
-        logger.info(f"ECS Service {dynamic_resource_name} does not exist, will create new service")
+        logger.info(f"ECS Service {resource_name} does not exist, will create new service")
         create_service(
             reference_service,
-            dynamic_resource_name,
-            new_task_definition,
+            resource_name,
+            new_task_definition_arn,
             cluster_name,
-            new_target_group_arn,
+            target_group_arn,
         )
 
-    cname = create_cname_record(
+    cname = create_record(
         dynamic_zone_id,
         dynamic_domain_name,
-        target_alb_domain_name,
+        target_alb['DNSName'],
+        target_alb['CanonicalHostedZoneId']
     )
 
-    config_add_env(
-        config_s3_bucket_name,
-        config_s3_key,
-        config_env_name,
+    endpoints_add(
+        endpoints_s3_bucket_name,
+        endpoints_s3_key,
+        endpoint_name,
         dynamic_domain_name,
-        config_env_type,
-        config_update_key,
+        endpoint_type,
+        endpoints_update_key,
     )
 
-    logger.info(f"Successfully finished creating environment {dynamic_resource_name}")
+    logger.info(f"Successfully finished creating environment {resource_name}")
 
     return {
-        'name': dynamic_resource_name,
+        'name': resource_name,
         'cname': cname,
     }
