@@ -1,1 +1,1 @@
-boto3==1.14.6 # pyup: ignore
+boto3==1.15.6 # pyup: ignore
